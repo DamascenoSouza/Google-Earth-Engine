@@ -1,27 +1,27 @@
 # Google-Earth-Engine
 Precipitação e Temperatura no Google Earth Engine 
 
-// Certifique-se de que ERA5_TP é uma ee.ImageCollection
+
 var ERA5_TP = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR')
   .select('total_precipitation_sum')
   .filterDate('2022-01-01', '2023-12-31'); // Filtrar de 1970 a 2023
 
-// Multiplicar cada imagem na coleção por 1000 para converter de metros para milímetros
+
 var ERA5_TP_mm = ERA5_TP.map(function(image) {
   return image.multiply(1000).copyProperties(image, ['system:time_start']);
 });
 
-// Carregar dados de temperatura máxima e mínima
+
 var ERA5_T2M = ee.ImageCollection('ECMWF/ERA5_LAND/MONTHLY_AGGR')
   .select(['temperature_2m_max', 'temperature_2m_min'])
   .filterDate('1970-01-01', '2023-12-31'); // Filtrar de 1970 a 2023
 
-// Converter temperaturas de Kelvin para Celsius
+
 var ERA5_T2M_Celsius = ERA5_T2M.map(function(image) {
   return image.subtract(273.15).copyProperties(image, ['system:time_start']);
 });
 
-// Criar o gráfico de séries temporais para precipitação
+
 var precipitacaoMensalChart = ui.Chart.image.series({
   imageCollection: ERA5_TP_mm,
   region: geometriaEstado,
@@ -58,7 +58,7 @@ var precipitacaoMensalChart = ui.Chart.image.series({
   legend: {position: 'none'}
 });
 
-// Criar o gráfico de temperatura máxima e mínima
+
 var temperaturaChart = ui.Chart.image.series({
   imageCollection: ERA5_T2M_Celsius,
   region: geometriaEstado,
@@ -91,6 +91,5 @@ var temperaturaChart = ui.Chart.image.series({
   legend: {position: 'none'}
 });
 
-// Exibir os gráficos
 print(precipitacaoMensalChart);
 print(temperaturaChart);
