@@ -1,0 +1,63 @@
+
+var startDate = '1993-01-01';
+var endDate = '2023-12-31';
+
+// Carregar a coleção de imagens ERA5 mensal e filtrar pelo intervalo de datas
+var Ita = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR")
+  .filterDate(startDate, endDate)
+  .map(function(image) {
+    // Transforma a precipitação de metros para milímetros
+    var precipitation_mm = image.select('total_precipitation_sum').multiply(1000);
+    return image.addBands(precipitation_mm.rename('precipitation_mm'));
+  });
+
+// Calcular a média e o desvio padrão da precipitação mensal
+var Itamean = Ita.select('precipitation_mm').mean().clip(geometry);
+var Itastd = Ita.select('precipitation_mm').reduce(ee.Reducer.stdDev()).clip(geometry);
+
+// Função para calcular o SPI anual para um ano específico
+var calculateSPIForYear = function(year) {
+  var startDateYear = ee.Date.fromYMD(year, 1, 1);
+  var endDateYear = ee.Date.fromYMD(year, 12, 31);
+
+  var annualCollection = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR")
+    .filterDate(startDateYear, endDateYear)
+    .map(function(image) {
+      var precipitation_mm = image.select('total_precipitation_sum').multiply(1000);
+      return image.addBands(precipitation_mm.rename('precipitation_mm'));
+    });
+
+  var annualRainfall = annualCollection.select('precipitation_mm').sum().clip(geometry);
+
+  var spi = annualRainfall.subtract(Itamean.multiply(12)).divide(Itastd.multiply(Math.sqrt(12))).rename('SPI_' + year);
+  return spi;
+};
+
+// Calcular e exportar SPI anual para todos os anos de 1980 a 2023
+var spiVis = {
+  min: -2,
+  max: 2,
+  palette: ['#d73027','#fc8d59','#fee08b','#ffffbf','#d9ef8b','#91cf60','#1a9850'] 
+};
+
+// Function to export a SPI layer to Google Drive
+function exportSPI(spiLayer, description, scale) {
+  Export.image.toDrive({
+    image: spiLayer,
+    description: description,
+    scale: scale,
+    region: geometry,
+    folder: 'Bacia',  // Make sure to specify the folder name here
+    fileNamePrefix: description,
+    maxPixels: 1e13
+  });
+}
+
+// Loop to calculate and export SPI for each year from 1993 to 2023
+for (var year = 1993; year <= 2023; year++) {
+  var spiYear = calculateSPIForYear(year);
+  Map.addLayer(spiYear, spiVis, 'SPI ' + year);
+  exportSPI(spiYear, 'SPI_' + year, 1000); // Adjust the scale as needed
+}
+
+Map.centerObject(geometry, 6); // Adjust zoom level as needed
