@@ -1,0 +1,88 @@
+
+// Carregar o conjunto de dados ERA5 de precipitação mensal
+var ERA5_TP = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR")
+  .select('total_precipitation_sum')
+  .filter(ee.Filter.date('1993-01-01', '2023-12-31'));
+
+// Adicionar o mapa do estado de interesse ao painel
+Map.centerObject(geometriaEstado, 5);
+Map.addLayer(geometriaEstado, {}, 'Estado');
+
+// Função para calcular a precipitação anual e exportar a imagem
+function exportPrecipitationYear(year) {
+  var startDate = ee.Date.fromYMD(year, 1, 1);
+  var endDate = ee.Date.fromYMD(year, 12, 31);
+  
+  var annualPrecipitation = ERA5_TP
+    .filter(ee.Filter.date(startDate, endDate))
+    .sum()
+    .clip(geometriaEstado)
+    .multiply(1000); // Transformar de m/m² para mm
+
+  var visualizationPrecipitacao = {
+    min: 0,
+    max: 3500, // Ajuste conforme necessário
+    palette: ['white', 'lightblue', 'deepskyblue', 'dodgerblue', 'royalblue', 'navy', 'darkblue', 'midnightblue', 'black']
+  };
+
+  Map.addLayer(annualPrecipitation, visualizationPrecipitacao, 'Precipitação Anual ' + year, false);
+
+  Export.image.toDrive({
+    image: annualPrecipitation,
+    description: 'ChuvaBHAP' + year,
+    region: geometriaEstado,
+    scale: 30,
+    crs: 'EPSG:4326',
+    folder: 'Bacia',
+    maxPixels: 1e13
+  });
+}
+
+// Loop sobre os anos de 1993 a 2023
+for (var year = 1993; year <= 2023; year++) {
+  exportPrecipitationYear(year);
+}
+
+// Visualizar a precipitação média mensal para o estado de interesse
+var precipitacaoMensal = ERA5_TP.sum().clip(geometriaEstado);
+
+// Definir os parâmetros de visualização
+var visualizationPrecipitacao = {
+  min: 0,
+  max: 3500, // Ajuste conforme necessário
+  palette: ['white', 'lightblue', 'deepskyblue', 'dodgerblue', 'royalblue', 'navy', 'darkblue', 'midnightblue', 'black']
+};
+
+// Adicionar a camada de precipitação ao mapa
+Map.addLayer(precipitacaoMensal, visualizationPrecipitacao, 'Precipitação Média Mensal (ERA5)', true, 0.8);
+
+// Extrair os valores de precipitação mensal
+var precipitacaoMensalChart = ui.Chart.image.series({
+  imageCollection: ERA5_TP,
+  region: geometriaEstado,
+  reducer: ee.Reducer.mean(),
+  scale: 1000, // Escolha a escala apropriada para os seus dados
+  xProperty: 'system:time_start'
+}).setOptions({
+  title: 'Precipitação Mensal Média (1993-2023)',
+  vAxis: {title: 'Precipitação (mm)'},
+  hAxis: {title: 'Data'},
+});
+
+// Adicionar o gráfico ao painel
+print(precipitacaoMensalChart);
+
+var stats = precipitacaoMensal.reduceRegion({
+  reducer: ee.Reducer.minMax(),
+  geometry: geometriaEstado,
+  scale: 1000, // Escolha a escala apropriada para seus dados
+  maxPixels: 1e9 // Ajuste conforme necessário
+});
+
+// Extrair os valores mínimo e máximo
+var minValue = ee.Number(stats.get('total_precipitation_sum_min'));
+var maxValue = ee.Number(stats.get('total_precipitation_sum_max'));
+
+// Imprimir os valores mínimo e máximo
+print('Valor Mínimo de Precipitação:', minValue);
+print('Valor Máximo de Precipitação:', maxValue);
