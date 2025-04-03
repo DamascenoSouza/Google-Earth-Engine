@@ -1,0 +1,61 @@
+// Carregar o conjunto de dados ERA5 de precipitação mensal
+var ERA5_TP = ee.ImageCollection('ECMWF/ERA5_LAND/MONTHLY_AGGR')
+  .select('total_precipitation_sum')
+  .filter(ee.Filter.date('1993-01-01', '2023-12-31'));
+
+// Função para calcular a média de precipitação para um mês específico e exportar a imagem
+function calcularMediaMensal(mes) {
+  var mesImages = ERA5_TP.filter(ee.Filter.calendarRange(mes, mes, 'month'))
+    .filter(ee.Filter.calendarRange(1993, 2023, 'year'));
+
+  var mediaMensal = mesImages.mean().clip(geometriaEstado)
+    .multiply(1000); // Transformar de m/m² para mm
+
+  var visualizationPrecipitacao = {
+    min: 0,
+    max: 200, // Ajuste conforme necessário
+    palette: ['white', 'lightblue', 'blue', 'darkblue', 'black']
+  };
+
+  Map.addLayer(mediaMensal, visualizationPrecipitacao, 'Média de Precipitação em ' + mesNome(mes) + ' (1993-2023)', true, 0.8);
+
+  var graficoMensal = ui.Chart.image.seriesByRegion({
+    imageCollection: mesImages,
+    regions: geometriaEstado,
+    reducer: ee.Reducer.mean(),
+    scale: 1000,
+    xProperty: 'system:time_start',
+    seriesProperty: 'year'
+  })
+  .setChartType('ColumnChart')
+  .setOptions({
+    title: 'Média de Precipitação em ' + mesNome(mes) + ' (1993-2023)',
+    hAxis: {title: 'Ano'},
+    vAxis: {title: 'Precipitação (mm)'},
+    legend: {position: 'top'}
+  });
+
+  print(graficoMensal);
+
+  // Exportar a imagem para o Google Drive
+  Export.image.toDrive({
+    image: mediaMensal,
+    description: 'Media_Precipitacao_' + mesNome(mes) + '_1993_2023',
+    folder: 'Bacia',
+    region: geometriaEstado,
+    scale: 30,
+    crs: 'EPSG:4326',
+    maxPixels: 1e13
+  });
+}
+
+// Função para obter o nome do mês
+function mesNome(mes) {
+  var nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  return nomesMeses[mes - 1];
+}
+
+// Loop sobre todos os meses de janeiro a dezembro
+for (var mes = 1; mes <= 12; mes++) {
+  calcularMediaMensal(mes);
+}
